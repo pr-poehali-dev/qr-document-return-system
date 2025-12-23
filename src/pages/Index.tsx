@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +26,12 @@ interface Item {
   qrCode?: string;
 }
 
+const STORAGE_KEY = 'documents_storage_system';
+const PASSWORD = '2025';
+
 const Index = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
   const [items, setItems] = useState<Item[]>([]);
   const [selectedQR, setSelectedQR] = useState<string | null>(null);
   const [showQRDialog, setShowQRDialog] = useState(false);
@@ -35,6 +40,45 @@ const Index = () => {
   const [showReturnScanner, setShowReturnScanner] = useState(false);
   const scannerRef = useRef<any>(null);
   const returnScannerRef = useRef<any>(null);
+
+  useEffect(() => {
+    const savedAuth = sessionStorage.getItem('auth');
+    if (savedAuth === PASSWORD) {
+      setIsAuthenticated(true);
+    }
+    
+    const savedItems = localStorage.getItem(STORAGE_KEY);
+    if (savedItems) {
+      try {
+        setItems(JSON.parse(savedItems));
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (items.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    }
+  }, [items]);
+
+  const handleLogin = () => {
+    if (passwordInput === PASSWORD) {
+      setIsAuthenticated(true);
+      sessionStorage.setItem('auth', PASSWORD);
+      toast.success('Вход выполнен');
+      setPasswordInput('');
+    } else {
+      toast.error('Неверный пароль');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    sessionStorage.removeItem('auth');
+    toast.success('Выход выполнен');
+  };
 
   const [depositForm, setDepositForm] = useState({
     name: '',
@@ -189,6 +233,14 @@ const Index = () => {
     toast.success('Операция перенесена в архив');
   };
 
+  const handleClearArchive = () => {
+    const confirmed = window.confirm('Вы уверены, что хотите очистить архив? Это действие нельзя отменить.');
+    if (confirmed) {
+      setItems(items.filter(i => i.status !== 'архив'));
+      toast.success('Архив очищен');
+    }
+  };
+
   const downloadQR = (qrCode: string, number: string) => {
     const link = document.createElement('a');
     link.href = qrCode;
@@ -200,6 +252,39 @@ const Index = () => {
   const issuedItems = items.filter(i => i.status === 'выдан');
   const returnedItems = items.filter(i => i.status === 'возвращён');
   const archivedItems = items.filter(i => i.status === 'архив');
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="bg-primary p-4 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+              <Icon name="Lock" size={40} className="text-white" />
+            </div>
+            <CardTitle className="text-2xl">Авторизация</CardTitle>
+            <CardDescription>Введите пароль для доступа к системе</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="password">Пароль</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Введите пароль"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+              />
+            </div>
+            <Button onClick={handleLogin} className="w-full gap-2" size="lg">
+              <Icon name="LogIn" size={20} />
+              Войти
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -216,10 +301,14 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-right">
+              <div className="text-right mr-4">
                 <p className="text-sm font-medium text-slate-700">На хранении</p>
                 <p className="text-2xl font-bold text-primary">{activeItems.length}</p>
               </div>
+              <Button variant="outline" onClick={handleLogout} className="gap-2">
+                <Icon name="LogOut" size={18} />
+                <span className="hidden sm:inline">Выход</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -227,7 +316,7 @@ const Index = () => {
 
       <main className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid bg-white border border-slate-200 p-1">
+          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid bg-white border border-slate-200 p-1">
             <TabsTrigger value="main" className="gap-2">
               <Icon name="Home" size={18} />
               <span className="hidden sm:inline">Главная</span>
@@ -243,6 +332,10 @@ const Index = () => {
             <TabsTrigger value="return" className="gap-2">
               <Icon name="RotateCcw" size={18} />
               <span className="hidden sm:inline">Возврат</span>
+            </TabsTrigger>
+            <TabsTrigger value="archive" className="gap-2">
+              <Icon name="Archive" size={18} />
+              <span className="hidden sm:inline">Архив</span>
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <Icon name="Clock" size={18} />
@@ -609,6 +702,78 @@ const Index = () => {
                                 <Icon name="RotateCcw" size={16} />
                                 Принять
                               </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="archive" className="animate-fade-in">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Icon name="Archive" size={24} />
+                      Архив документов
+                    </CardTitle>
+                    <CardDescription>Все завершённые операции хранятся здесь навсегда</CardDescription>
+                  </div>
+                  {archivedItems.length > 0 && (
+                    <Button variant="destructive" onClick={handleClearArchive} className="gap-2">
+                      <Icon name="Trash2" size={18} />
+                      Очистить архив
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {archivedItems.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Icon name="Archive" size={48} className="mx-auto text-slate-300 mb-4" />
+                    <p className="text-slate-500">Архив пуст</p>
+                    <p className="text-sm text-slate-400 mt-2">Завершённые операции появятся здесь</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 text-blue-800">
+                        <Icon name="Info" size={20} />
+                        <p className="font-medium">Всего архивных записей: {archivedItems.length}</p>
+                      </div>
+                      <p className="text-sm text-blue-600 mt-1">Данные сохраняются автоматически и не удаляются при обновлении страницы</p>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Номер</TableHead>
+                          <TableHead>Документ</TableHead>
+                          <TableHead>Владелец</TableHead>
+                          <TableHead>Приём</TableHead>
+                          <TableHead>Выдача</TableHead>
+                          <TableHead>Возврат</TableHead>
+                          <TableHead>Статус</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {archivedItems.map(item => (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-mono text-sm">{item.number}</TableCell>
+                            <TableCell className="font-medium">{item.name}</TableCell>
+                            <TableCell>{item.depositor}</TableCell>
+                            <TableCell>{item.dateReceived}</TableCell>
+                            <TableCell>{item.dateIssued || '—'}</TableCell>
+                            <TableCell>{item.dateReturned || '—'}</TableCell>
+                            <TableCell>
+                              <Badge className="bg-slate-100 text-slate-800 hover:bg-slate-100">
+                                <Icon name="Archive" size={14} className="mr-1" />
+                                {item.status}
+                              </Badge>
                             </TableCell>
                           </TableRow>
                         ))}
