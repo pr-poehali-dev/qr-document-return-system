@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
 import QRCode from 'qrcode';
+import QrScanner from 'react-qr-scanner';
 
 interface Item {
   id: string;
@@ -29,6 +30,8 @@ const Index = () => {
   const [selectedQR, setSelectedQR] = useState<string | null>(null);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('main');
+  const [showScanner, setShowScanner] = useState(false);
+  const scannerRef = useRef<any>(null);
 
   const [depositForm, setDepositForm] = useState({
     name: '',
@@ -99,13 +102,15 @@ const Index = () => {
     speakNumber(itemNumber);
   };
 
-  const handleIssue = () => {
-    if (!issueNumber.trim()) {
+  const handleIssue = (documentNumber?: string) => {
+    const numberToCheck = documentNumber || issueNumber.trim();
+    
+    if (!numberToCheck) {
       toast.error('Введите номер документа');
       return;
     }
 
-    const item = items.find(i => i.number === issueNumber.trim() && i.status === 'хранится');
+    const item = items.find(i => i.number === numberToCheck && i.status === 'хранится');
 
     if (!item) {
       toast.error('Документ не найден или уже выдан');
@@ -122,6 +127,18 @@ const Index = () => {
     toast.success(`Выдан документ: ${item.name}`);
     speakNumber(item.number);
     setIssueNumber('');
+    setShowScanner(false);
+  };
+
+  const handleScan = (result: any) => {
+    if (result?.text) {
+      setIssueNumber(result.text);
+      handleIssue(result.text);
+    }
+  };
+
+  const handleScanError = (error: any) => {
+    console.error('QR Scanner error:', error);
   };
 
   const handleArchive = (itemId: string) => {
@@ -349,15 +366,48 @@ const Index = () => {
                       value={issueNumber}
                       onChange={(e) => setIssueNumber(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleIssue()}
-                      className="font-mono"
+                      className="font-mono flex-1"
                     />
-                    <Button onClick={handleIssue} size="lg" className="gap-2">
+                    <Button onClick={() => setShowScanner(!showScanner)} size="lg" variant="outline" className="gap-2">
+                      <Icon name="Camera" size={20} />
+                      Сканер
+                    </Button>
+                    <Button onClick={() => handleIssue()} size="lg" className="gap-2">
                       <Icon name="Volume2" size={20} />
                       Выдать
                     </Button>
                   </div>
-                  <p className="text-sm text-slate-500">Система произнесёт номер документа вслух</p>
+                  <p className="text-sm text-slate-500">Введите номер или отсканируйте QR-код через камеру</p>
                 </div>
+
+                {showScanner && (
+                  <Card className="p-4 bg-slate-50">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold flex items-center gap-2">
+                          <Icon name="Camera" size={20} />
+                          Сканирование QR-кода
+                        </h4>
+                        <Button size="sm" variant="ghost" onClick={() => setShowScanner(false)}>
+                          <Icon name="X" size={18} />
+                        </Button>
+                      </div>
+                      <div className="relative aspect-square max-w-md mx-auto overflow-hidden rounded-lg border-4 border-primary">
+                        <QrScanner
+                          ref={scannerRef}
+                          delay={300}
+                          onError={handleScanError}
+                          onScan={handleScan}
+                          style={{ width: '100%' }}
+                          constraints={{
+                            video: { facingMode: 'environment' }
+                          }}
+                        />
+                      </div>
+                      <p className="text-sm text-center text-slate-600">Наведите камеру на QR-код документа</p>
+                    </div>
+                  </Card>
+                )}
 
                 {activeItems.length > 0 && (
                   <div className="mt-8">
