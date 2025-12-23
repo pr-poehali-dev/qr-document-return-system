@@ -24,14 +24,20 @@ interface Item {
   dateReturned?: string;
   status: 'хранится' | 'выдан' | 'возвращён' | 'архив';
   qrCode?: string;
+  receivedBy?: string;
+  issuedBy?: string;
+  returnedBy?: string;
 }
 
 const STORAGE_KEY = 'documents_storage_system';
+const OPERATOR_KEY = 'current_operator';
 const PASSWORD = '2025';
 
 const Index = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [operatorName, setOperatorName] = useState('');
+  const [currentOperator, setCurrentOperator] = useState('');
   const [items, setItems] = useState<Item[]>([]);
   const [selectedQR, setSelectedQR] = useState<string | null>(null);
   const [showQRDialog, setShowQRDialog] = useState(false);
@@ -43,8 +49,10 @@ const Index = () => {
 
   useEffect(() => {
     const savedAuth = sessionStorage.getItem('auth');
-    if (savedAuth === PASSWORD) {
+    const savedOperator = sessionStorage.getItem(OPERATOR_KEY);
+    if (savedAuth === PASSWORD && savedOperator) {
       setIsAuthenticated(true);
+      setCurrentOperator(savedOperator);
     }
     
     const savedItems = localStorage.getItem(STORAGE_KEY);
@@ -64,11 +72,18 @@ const Index = () => {
   }, [items]);
 
   const handleLogin = () => {
+    if (!operatorName.trim()) {
+      toast.error('Введите имя оператора');
+      return;
+    }
     if (passwordInput === PASSWORD) {
       setIsAuthenticated(true);
+      setCurrentOperator(operatorName.trim());
       sessionStorage.setItem('auth', PASSWORD);
-      toast.success('Вход выполнен');
+      sessionStorage.setItem(OPERATOR_KEY, operatorName.trim());
+      toast.success(`Добро пожаловать, ${operatorName.trim()}!`);
       setPasswordInput('');
+      setOperatorName('');
     } else {
       toast.error('Неверный пароль');
     }
@@ -76,7 +91,9 @@ const Index = () => {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setCurrentOperator('');
     sessionStorage.removeItem('auth');
+    sessionStorage.removeItem(OPERATOR_KEY);
     toast.success('Выход выполнен');
   };
 
@@ -137,7 +154,8 @@ const Index = () => {
       depositor: depositForm.depositor,
       dateReceived: new Date().toLocaleDateString('ru-RU'),
       status: 'хранится',
-      qrCode
+      qrCode,
+      receivedBy: currentOperator
     };
 
     setItems([newItem, ...items]);
@@ -168,7 +186,7 @@ const Index = () => {
 
     setItems(items.map(i => 
       i.id === item.id 
-        ? { ...i, status: 'выдан', dateIssued: new Date().toLocaleDateString('ru-RU') }
+        ? { ...i, status: 'выдан', dateIssued: new Date().toLocaleDateString('ru-RU'), issuedBy: currentOperator }
         : i
     ));
 
@@ -196,7 +214,7 @@ const Index = () => {
 
     setItems(items.map(i => 
       i.id === item.id 
-        ? { ...i, status: 'возвращён', dateReturned: new Date().toLocaleDateString('ru-RU') }
+        ? { ...i, status: 'возвращён', dateReturned: new Date().toLocaleDateString('ru-RU'), returnedBy: currentOperator }
         : i
     ));
 
@@ -266,6 +284,16 @@ const Index = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="operator-name">Имя оператора / кассира</Label>
+              <Input
+                id="operator-name"
+                type="text"
+                placeholder="Иванов И.И."
+                value={operatorName}
+                onChange={(e) => setOperatorName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="password">Пароль</Label>
               <Input
                 id="password"
@@ -301,6 +329,10 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              <div className="text-right mr-4">
+                <p className="text-sm font-medium text-slate-700">Оператор</p>
+                <p className="text-lg font-bold text-primary">{currentOperator}</p>
+              </div>
               <div className="text-right mr-4">
                 <p className="text-sm font-medium text-slate-700">На хранении</p>
                 <p className="text-2xl font-bold text-primary">{activeItems.length}</p>
@@ -755,8 +787,11 @@ const Index = () => {
                           <TableHead>Документ</TableHead>
                           <TableHead>Владелец</TableHead>
                           <TableHead>Приём</TableHead>
+                          <TableHead>Принял</TableHead>
                           <TableHead>Выдача</TableHead>
+                          <TableHead>Выдал</TableHead>
                           <TableHead>Возврат</TableHead>
+                          <TableHead>Принял возврат</TableHead>
                           <TableHead>Статус</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -767,8 +802,11 @@ const Index = () => {
                             <TableCell className="font-medium">{item.name}</TableCell>
                             <TableCell>{item.depositor}</TableCell>
                             <TableCell>{item.dateReceived}</TableCell>
+                            <TableCell className="text-sm text-slate-600">{item.receivedBy || '—'}</TableCell>
                             <TableCell>{item.dateIssued || '—'}</TableCell>
+                            <TableCell className="text-sm text-slate-600">{item.issuedBy || '—'}</TableCell>
                             <TableCell>{item.dateReturned || '—'}</TableCell>
+                            <TableCell className="text-sm text-slate-600">{item.returnedBy || '—'}</TableCell>
                             <TableCell>
                               <Badge className="bg-slate-100 text-slate-800 hover:bg-slate-100">
                                 <Icon name="Archive" size={14} className="mr-1" />
@@ -808,8 +846,11 @@ const Index = () => {
                         <TableHead>Документ</TableHead>
                         <TableHead>Владелец</TableHead>
                         <TableHead>Приём</TableHead>
+                        <TableHead>Принял</TableHead>
                         <TableHead>Выдача</TableHead>
+                        <TableHead>Выдал</TableHead>
                         <TableHead>Возврат</TableHead>
+                        <TableHead>Принял возврат</TableHead>
                         <TableHead>Статус</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -820,8 +861,11 @@ const Index = () => {
                           <TableCell className="font-medium">{item.name}</TableCell>
                           <TableCell>{item.depositor}</TableCell>
                           <TableCell>{item.dateReceived}</TableCell>
+                          <TableCell className="text-sm text-slate-600">{item.receivedBy || '—'}</TableCell>
                           <TableCell>{item.dateIssued || '—'}</TableCell>
+                          <TableCell className="text-sm text-slate-600">{item.issuedBy || '—'}</TableCell>
                           <TableCell>{item.dateReturned || '—'}</TableCell>
+                          <TableCell className="text-sm text-slate-600">{item.returnedBy || '—'}</TableCell>
                           <TableCell>
                             <Badge 
                               className={
