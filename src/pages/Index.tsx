@@ -21,7 +21,8 @@ interface Item {
   depositor: string;
   dateReceived: string;
   dateIssued?: string;
-  status: 'хранится' | 'выдан' | 'архив';
+  dateReturned?: string;
+  status: 'хранится' | 'выдан' | 'возвращён' | 'архив';
   qrCode?: string;
 }
 
@@ -31,7 +32,9 @@ const Index = () => {
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('main');
   const [showScanner, setShowScanner] = useState(false);
+  const [showReturnScanner, setShowReturnScanner] = useState(false);
   const scannerRef = useRef<any>(null);
+  const returnScannerRef = useRef<any>(null);
 
   const [depositForm, setDepositForm] = useState({
     name: '',
@@ -40,6 +43,7 @@ const Index = () => {
   });
 
   const [issueNumber, setIssueNumber] = useState('');
+  const [returnNumber, setReturnNumber] = useState('');
 
   const generateItemNumber = () => {
     return `DOC-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -130,10 +134,45 @@ const Index = () => {
     setShowScanner(false);
   };
 
+  const handleReturn = (documentNumber?: string) => {
+    const numberToCheck = documentNumber || returnNumber.trim();
+    
+    if (!numberToCheck) {
+      toast.error('Введите номер документа');
+      return;
+    }
+
+    const item = items.find(i => i.number === numberToCheck && i.status === 'выдан');
+
+    if (!item) {
+      toast.error('Документ не найден или не был выдан');
+      speakNumber('не найден');
+      return;
+    }
+
+    setItems(items.map(i => 
+      i.id === item.id 
+        ? { ...i, status: 'возвращён', dateReturned: new Date().toLocaleDateString('ru-RU') }
+        : i
+    ));
+
+    toast.success(`Возвращён документ: ${item.name}`);
+    speakNumber(item.number);
+    setReturnNumber('');
+    setShowReturnScanner(false);
+  };
+
   const handleScan = (result: any) => {
     if (result?.text) {
       setIssueNumber(result.text);
       handleIssue(result.text);
+    }
+  };
+
+  const handleReturnScan = (result: any) => {
+    if (result?.text) {
+      setReturnNumber(result.text);
+      handleReturn(result.text);
     }
   };
 
@@ -159,6 +198,7 @@ const Index = () => {
 
   const activeItems = items.filter(i => i.status === 'хранится');
   const issuedItems = items.filter(i => i.status === 'выдан');
+  const returnedItems = items.filter(i => i.status === 'возвращён');
   const archivedItems = items.filter(i => i.status === 'архив');
 
   return (
@@ -187,7 +227,7 @@ const Index = () => {
 
       <main className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid bg-white border border-slate-200 p-1">
+          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid bg-white border border-slate-200 p-1">
             <TabsTrigger value="main" className="gap-2">
               <Icon name="Home" size={18} />
               <span className="hidden sm:inline">Главная</span>
@@ -200,6 +240,10 @@ const Index = () => {
               <Icon name="ArrowUpFromLine" size={18} />
               <span className="hidden sm:inline">Выдача</span>
             </TabsTrigger>
+            <TabsTrigger value="return" className="gap-2">
+              <Icon name="RotateCcw" size={18} />
+              <span className="hidden sm:inline">Возврат</span>
+            </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <Icon name="Clock" size={18} />
               <span className="hidden sm:inline">История</span>
@@ -211,7 +255,7 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="main" className="space-y-6 animate-fade-in">
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="hover-scale cursor-pointer border-2 hover:border-primary transition-all" onClick={() => setActiveTab('deposit')}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -234,7 +278,20 @@ const Index = () => {
                     <Icon name="ChevronRight" size={24} className="text-slate-400" />
                   </div>
                   <CardTitle className="text-xl">Выдача</CardTitle>
-                  <CardDescription>Возврат документа по QR-коду с голосовым оповещением</CardDescription>
+                  <CardDescription>Выдача документа владельцу</CardDescription>
+                </CardHeader>
+              </Card>
+
+              <Card className="hover-scale cursor-pointer border-2 hover:border-primary transition-all" onClick={() => setActiveTab('return')}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="bg-orange-100 p-3 rounded-lg">
+                      <Icon name="RotateCcw" size={24} className="text-orange-600" />
+                    </div>
+                    <Icon name="ChevronRight" size={24} className="text-slate-400" />
+                  </div>
+                  <CardTitle className="text-xl">Возврат</CardTitle>
+                  <CardDescription>Приём документа обратно на хранение</CardDescription>
                 </CardHeader>
               </Card>
 
@@ -247,7 +304,7 @@ const Index = () => {
                     <Icon name="ChevronRight" size={24} className="text-slate-400" />
                   </div>
                   <CardTitle className="text-xl">История</CardTitle>
-                  <CardDescription>Журнал всех операций и архивные записи</CardDescription>
+                  <CardDescription>Журнал всех операций</CardDescription>
                 </CardHeader>
               </Card>
             </div>
@@ -454,6 +511,115 @@ const Index = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="return" className="animate-fade-in">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Icon name="RotateCcw" size={24} />
+                  Возврат документа
+                </CardTitle>
+                <CardDescription>Примите документ обратно на хранение</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="return-number">Номер документа</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="return-number"
+                      placeholder="DOC-1234567890-123"
+                      value={returnNumber}
+                      onChange={(e) => setReturnNumber(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleReturn()}
+                      className="font-mono flex-1"
+                    />
+                    <Button onClick={() => setShowReturnScanner(!showReturnScanner)} size="lg" variant="outline" className="gap-2">
+                      <Icon name="Camera" size={20} />
+                      Сканер
+                    </Button>
+                    <Button onClick={() => handleReturn()} size="lg" className="gap-2">
+                      <Icon name="Volume2" size={20} />
+                      Принять
+                    </Button>
+                  </div>
+                  <p className="text-sm text-slate-500">Введите номер или отсканируйте QR-код для возврата</p>
+                </div>
+
+                {showReturnScanner && (
+                  <Card className="p-4 bg-slate-50">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold flex items-center gap-2">
+                          <Icon name="Camera" size={20} />
+                          Сканирование QR-кода
+                        </h4>
+                        <Button size="sm" variant="ghost" onClick={() => setShowReturnScanner(false)}>
+                          <Icon name="X" size={18} />
+                        </Button>
+                      </div>
+                      <div className="relative aspect-square max-w-md mx-auto overflow-hidden rounded-lg border-4 border-primary">
+                        <QrScanner
+                          ref={returnScannerRef}
+                          delay={300}
+                          onError={handleScanError}
+                          onScan={handleReturnScan}
+                          style={{ width: '100%' }}
+                          constraints={{
+                            video: { facingMode: 'environment' }
+                          }}
+                        />
+                      </div>
+                      <p className="text-sm text-center text-slate-600">Наведите камеру на QR-код документа</p>
+                    </div>
+                  </Card>
+                )}
+
+                {issuedItems.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2">
+                      <Icon name="List" size={20} />
+                      Выданные документы (готовы к возврату)
+                    </h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Номер</TableHead>
+                          <TableHead>Документ</TableHead>
+                          <TableHead>Владелец</TableHead>
+                          <TableHead>Выдан</TableHead>
+                          <TableHead>Действие</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {issuedItems.map(item => (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-mono text-sm">{item.number}</TableCell>
+                            <TableCell className="font-medium">{item.name}</TableCell>
+                            <TableCell>{item.depositor}</TableCell>
+                            <TableCell>{item.dateIssued}</TableCell>
+                            <TableCell>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => {
+                                  setReturnNumber(item.number);
+                                  handleReturn();
+                                }}
+                                className="gap-1"
+                              >
+                                <Icon name="RotateCcw" size={16} />
+                                Принять
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="history" className="animate-fade-in space-y-6">
             <Card>
               <CardHeader>
@@ -478,6 +644,7 @@ const Index = () => {
                         <TableHead>Владелец</TableHead>
                         <TableHead>Приём</TableHead>
                         <TableHead>Выдача</TableHead>
+                        <TableHead>Возврат</TableHead>
                         <TableHead>Статус</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -489,6 +656,7 @@ const Index = () => {
                           <TableCell>{item.depositor}</TableCell>
                           <TableCell>{item.dateReceived}</TableCell>
                           <TableCell>{item.dateIssued || '—'}</TableCell>
+                          <TableCell>{item.dateReturned || '—'}</TableCell>
                           <TableCell>
                             <Badge 
                               className={
@@ -496,6 +664,8 @@ const Index = () => {
                                   ? 'bg-green-100 text-green-800 hover:bg-green-100'
                                   : item.status === 'выдан'
                                   ? 'bg-blue-100 text-blue-800 hover:bg-blue-100'
+                                  : item.status === 'возвращён'
+                                  ? 'bg-purple-100 text-purple-800 hover:bg-purple-100'
                                   : 'bg-slate-100 text-slate-800 hover:bg-slate-100'
                               }
                             >
@@ -536,11 +706,11 @@ const Index = () => {
                   </div>
                 </div>
 
-                {issuedItems.length > 0 && (
+                {returnedItems.length > 0 && (
                   <div>
                     <h3 className="font-semibold mb-4 flex items-center gap-2">
                       <Icon name="Archive" size={20} />
-                      Завершённые операции (готовы к архивированию)
+                      Возвращённые документы (готовы к архивированию)
                     </h3>
                     <Table>
                       <TableHeader>
@@ -548,17 +718,17 @@ const Index = () => {
                           <TableHead>Номер</TableHead>
                           <TableHead>Документ</TableHead>
                           <TableHead>Владелец</TableHead>
-                          <TableHead>Выдан</TableHead>
+                          <TableHead>Возвращён</TableHead>
                           <TableHead>Действие</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {issuedItems.map(item => (
+                        {returnedItems.map(item => (
                           <TableRow key={item.id}>
                             <TableCell className="font-mono text-sm">{item.number}</TableCell>
                             <TableCell className="font-medium">{item.name}</TableCell>
                             <TableCell>{item.depositor}</TableCell>
-                            <TableCell>{item.dateIssued}</TableCell>
+                            <TableCell>{item.dateReturned}</TableCell>
                             <TableCell>
                               <Button 
                                 size="sm" 
